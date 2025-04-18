@@ -3,23 +3,13 @@ let call;
 let mixedStream = null;
 let incomingCallRef = null;
 let volumeMonitor;
-let compressor; // make it global to adjust
+
+let compressor, bassEQ, midEQ, trebleEQ, noiseFilter;
 
 const statusEl = document.getElementById("status");
 const debugLog = document.getElementById("debug-log");
 const volumeMeter = document.getElementById("volume-meter");
 const playbackBtnContainer = document.getElementById("mobile-playback-button");
-
-// 🎚 Dynamic compression ratio slider
-const ratioSlider = document.getElementById("ratio-slider");
-const ratioValue = document.getElementById("ratio-value");
-ratioSlider.addEventListener("input", () => {
-  ratioValue.textContent = ratioSlider.value;
-  if (compressor) {
-    compressor.ratio.setValueAtTime(ratioSlider.value, compressor.context.currentTime);
-    logDebug("🔧 Compression ratio set to " + ratioSlider.value);
-  }
-});
 
 peer.on("open", id => {
   document.getElementById("my-id").textContent = id;
@@ -35,8 +25,6 @@ peer.on("call", incomingCall => {
   statusEl.textContent = "📲 Incoming call from " + callerId;
 
   incomingCall.on("stream", stream => {
-    logDebug("📥 Incoming audio stream detected");
-
     const audio = document.createElement("audio");
     audio.srcObject = stream;
     audio.autoplay = false;
@@ -75,11 +63,7 @@ async function prepareAudioStream() {
   logDebug("🎙 Preparing audio stream...");
 
   try {
-    const displayStream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: true
-    });
-
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     const audioContext = new AudioContext();
@@ -88,56 +72,71 @@ async function prepareAudioStream() {
     const sysSource = audioContext.createMediaStreamSource(displayStream);
     const micSource = audioContext.createMediaStreamSource(micStream);
 
-    // 🎛 Add compressor for volume leveling
+    // 🎛 Filters
     compressor = audioContext.createDynamicsCompressor();
+    bassEQ = audioContext.createBiquadFilter();
+    midEQ = audioContext.createBiquadFilter();
+    trebleEQ = audioContext.createBiquadFilter();
+    noiseFilter = audioContext.createBiquadFilter();
+
     compressor.threshold.setValueAtTime(-30, audioContext.currentTime);
     compressor.knee.setValueAtTime(40, audioContext.currentTime);
-    compressor.ratio.setValueAtTime(ratioSlider.value, audioContext.currentTime);
+    compressor.ratio.setValueAtTime(12, audioContext.currentTime);
     compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
     compressor.release.setValueAtTime(0.25, audioContext.currentTime);
 
-    sysSource.connect(compressor);
-    micSource.connect(compressor);
+    bassEQ.type = "lowshelf";
+    bassEQ.frequency.value = 200;
+
+    midEQ.type = "peaking";
+    midEQ.frequency.value = 1000;
+    midEQ.Q.value = 1;
+
+    trebleEQ.type = "highshelf";
+    trebleEQ.frequency.value = 3000;
+
+    noiseFilter.type = "highpass";
+    noiseFilter.frequency.value = 120;
+
+    sysSource.connect(noiseFilter);
+    micSource.connect(noiseFilter);
+    noiseFilter.connect(bassEQ);
+    bassEQ.connect(midEQ);
+    midEQ.connect(trebleEQ);
+    trebleEQ.connect(compressor);
     compressor.connect(destination);
 
     monitorVolume(compressor, audioContext);
-
-    displayStream.getAudioTracks().forEach((track, i) =>
-      logDebug(`🔊 System Audio Track ${i + 1}: ${track.label}`)
-    );
-    micStream.getAudioTracks().forEach((track, i) =>
-      logDebug(`🎤 Mic Track ${i + 1}: ${track.label}`)
-    );
-
     mixedStream = destination.stream;
-    statusEl.textContent = "🎙 Stream ready (volume leveled)";
-    logDebug("✅ Stream is ready. Now start your call.");
+
+    statusEl.textContent = "🎙 Stream ready (with EQ & Noise Filter)";
+    logDebug("✅ Stream is ready.");
   } catch (err) {
-    logDebug("❌ Error capturing stream: " + err.message);
-    alert("Error capturing system audio. Please share a tab and enable audio.");
+    logDebug("❌ Stream error: " + err.message);
+    alert("Error capturing audio. Please try again.");
   }
 }
 
 function startCall() {
   const peerId = document.getElementById("peer-id").value;
   if (!mixedStream) {
-    alert("⚠️ Please start the stream first.");
+    alert("Please start the stream first.");
     return;
   }
 
   call = peer.call(peerId, mixedStream);
   statusEl.textContent = "📞 Calling...";
-  logDebug("📞 Calling peer: " + peerId);
+  logDebug("📞 Calling " + peerId);
 
   call.on("stream", stream => {
-    const audio = document.createElement("audio");
+    const audio = new Audio();
     audio.srcObject = stream;
     audio.autoplay = true;
     audio.playsInline = true;
     audio.style.display = "none";
     document.body.appendChild(audio);
     audio.play();
-    statusEl.textContent = "✅ Connected and streaming.";
+    statusEl.textContent = "✅ Streaming started.";
   });
 }
 
@@ -146,7 +145,6 @@ function stopCall() {
     call.close();
     call = null;
     statusEl.textContent = "🔌 Call ended.";
-    logDebug("🛑 Call manually stopped.");
   }
 
   if (mixedStream) {
@@ -164,10 +162,9 @@ function stopCall() {
 function answerCall() {
   if (incomingCallRef) {
     incomingCallRef.answer();
-    statusEl.textContent = "✅ Call answered.";
     document.getElementById("incoming-call-box").style.display = "none";
     document.getElementById("caller-id").textContent = "...";
-    logDebug("✅ Call answered by receiver.");
+    logDebug("✅ Call answered.");
   }
 }
 
@@ -178,7 +175,7 @@ function rejectCall() {
     document.getElementById("incoming-call-box").style.display = "none";
     document.getElementById("caller-id").textContent = "...";
     statusEl.textContent = "❌ Call rejected.";
-    logDebug("❌ Call rejected by receiver.");
+    logDebug("❌ Call rejected.");
   }
 }
 
@@ -187,7 +184,6 @@ function logDebug(msg) {
   debugLog.scrollTop = debugLog.scrollHeight;
 }
 
-// 📊 Live volume meter
 function monitorVolume(source, context) {
   const analyser = context.createAnalyser();
   analyser.fftSize = 256;
@@ -205,3 +201,22 @@ function monitorVolume(source, context) {
 
   updateVolume();
 }
+
+// 🎚 Sliders
+document.getElementById("ratio-slider").addEventListener("input", e => {
+  const val = parseFloat(e.target.value);
+  if (compressor) compressor.ratio.setValueAtTime(val, compressor.context.currentTime);
+  document.getElementById("ratio-value").textContent = val;
+});
+
+["bass", "mid", "treble"].forEach(id => {
+  document.getElementById(id).addEventListener("input", e => {
+    const val = parseFloat(e.target.value);
+    document.getElementById(`${id}-val`).textContent = val;
+
+    const gain = val * 10 - 10;
+    if (id === "bass") bassEQ.gain.value = gain;
+    else if (id === "mid") midEQ.gain.value = gain;
+    else if (id === "treble") trebleEQ.gain.value = gain;
+  });
+});
