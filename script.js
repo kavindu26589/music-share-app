@@ -72,35 +72,39 @@ async function prepareAudioStream() {
     const sysSource = audioContext.createMediaStreamSource(displayStream);
     const micSource = audioContext.createMediaStreamSource(micStream);
 
-    // 🎛 Auto EQ & Compressor
+    // ✅ Create all filters
     compressor = audioContext.createDynamicsCompressor();
+    noiseFilter = audioContext.createBiquadFilter();
     bassEQ = audioContext.createBiquadFilter();
     midEQ = audioContext.createBiquadFilter();
     trebleEQ = audioContext.createBiquadFilter();
-    noiseFilter = audioContext.createBiquadFilter();
 
+    // ✅ Compressor settings
     compressor.threshold.setValueAtTime(-30, audioContext.currentTime);
     compressor.knee.setValueAtTime(40, audioContext.currentTime);
     compressor.ratio.setValueAtTime(12, audioContext.currentTime);
     compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
     compressor.release.setValueAtTime(0.25, audioContext.currentTime);
 
+    // ✅ Noise filter (highpass)
+    noiseFilter.type = "highpass";
+    noiseFilter.frequency.value = 120;
+
+    // ✅ EQ settings
     bassEQ.type = "lowshelf";
     bassEQ.frequency.value = 200;
-    bassEQ.gain.value = 4;  // boost bass
+    bassEQ.gain.setValueAtTime(4, audioContext.currentTime);
 
     midEQ.type = "peaking";
     midEQ.frequency.value = 1000;
     midEQ.Q.value = 1;
-    midEQ.gain.value = 2;  // boost mids
+    midEQ.gain.setValueAtTime(2, audioContext.currentTime);
 
     trebleEQ.type = "highshelf";
     trebleEQ.frequency.value = 3000;
-    trebleEQ.gain.value = 3;  // boost highs
+    trebleEQ.gain.setValueAtTime(3, audioContext.currentTime);
 
-    noiseFilter.type = "highpass";
-    noiseFilter.frequency.value = 120;
-
+    // ✅ Connect audio graph
     sysSource.connect(noiseFilter);
     micSource.connect(noiseFilter);
 
@@ -116,8 +120,8 @@ async function prepareAudioStream() {
     statusEl.textContent = "🎙 Stream ready (auto-EQ)";
     logDebug("✅ Stream ready with automatic EQ & noise filter.");
   } catch (err) {
-    logDebug("❌ Error: " + err.message);
-    alert("Error capturing audio.");
+    logDebug("❌ Error capturing stream: " + err.message);
+    alert("Error capturing audio. Please try again.");
   }
 }
 
