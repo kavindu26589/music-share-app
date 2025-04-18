@@ -1,6 +1,7 @@
 const peer = new Peer();
 let call;
-let mixedStream;
+let mixedStream = null;
+let incomingCallRef = null;
 let volumeMonitor;
 
 const statusEl = document.getElementById("status");
@@ -12,73 +13,86 @@ peer.on("open", id => {
 });
 
 peer.on("call", incomingCall => {
-  incomingCall.answer();
+  const callerId = incomingCall.peer;
+  incomingCallRef = incomingCall;
+
+  document.getElementById("incoming-call-box").style.display = "block";
+  document.getElementById("caller-id").textContent = callerId;
+  statusEl.textContent = "📲 Incoming call from " + callerId;
+
   incomingCall.on("stream", stream => {
     const audio = new Audio();
     audio.srcObject = stream;
     audio.autoplay = true;
-    statusEl.textContent = "📡 Receiving stream from caller.";
-
     stream.getAudioTracks().forEach((track, i) => {
       logDebug(`📥 Received Track ${i + 1}: ${track.label}`);
     });
+    statusEl.textContent = "📡 Receiving stream from " + callerId;
+  });
+
+  incomingCall.on("close", () => {
+    document.getElementById("incoming-call-box").style.display = "none";
+    document.getElementById("caller-id").textContent = "...";
+    statusEl.textContent = "📴 Call ended.";
   });
 });
 
-async function startCall() {
-  const peerId = document.getElementById("peer-id").value;
-  statusEl.textContent = "🔄 Preparing stream...";
-  logDebug("🎧 Attempting to capture system audio + mic...");
+async function prepareAudioStream() {
+  logDebug("🎙 Preparing audio stream...");
 
   try {
-    let displayStream = null;
-    try {
-      displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true, // to allow tab selection
-        audio: true
-      });
-    } catch (err) {
-      logDebug("⚠️ System audio capture not supported or denied.");
-    }
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true
+    });
 
     const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     const audioContext = new AudioContext();
     const destination = audioContext.createMediaStreamDestination();
 
-    if (displayStream) {
-      const sysSource = audioContext.createMediaStreamSource(displayStream);
-      sysSource.connect(destination);
-      monitorVolume(sysSource, audioContext);
-      displayStream.getAudioTracks().forEach((t, i) =>
-        logDebug(`🔊 System Audio Track ${i + 1}: ${t.label}`)
-      );
-    } else {
-      logDebug("❌ No system audio, mic only.");
-    }
-
+    const sysSource = audioContext.createMediaStreamSource(displayStream);
     const micSource = audioContext.createMediaStreamSource(micStream);
+
+    sysSource.connect(destination);
     micSource.connect(destination);
-    micStream.getAudioTracks().forEach((t, i) =>
-      logDebug(`🎤 Mic Track ${i + 1}: ${t.label}`)
+
+    monitorVolume(sysSource, audioContext);
+
+    displayStream.getAudioTracks().forEach((track, i) =>
+      logDebug(`🔊 System Audio Track ${i + 1}: ${track.label}`)
+    );
+    micStream.getAudioTracks().forEach((track, i) =>
+      logDebug(`🎤 Mic Track ${i + 1}: ${track.label}`)
     );
 
     mixedStream = destination.stream;
-
-    call = peer.call(peerId, mixedStream);
-    call.on("stream", stream => {
-      const audio = new Audio();
-      audio.srcObject = stream;
-      audio.autoplay = true;
-      statusEl.textContent = "✅ Connected and streaming.";
-    });
-
-    statusEl.textContent = "📞 Calling...";
+    statusEl.textContent = "🎙 Stream ready.";
+    logDebug("✅ Stream is ready. Now start your call.");
   } catch (err) {
-    alert("❌ Error: " + err.message);
-    logDebug("❌ Error during startCall: " + err.message);
-    statusEl.textContent = "❌ Failed to start.";
+    logDebug("❌ Error capturing stream: " + err.message);
+    alert("Error capturing system audio. Please share a tab and enable audio.");
   }
+}
+
+function startCall() {
+  const peerId = document.getElementById("peer-id").value;
+
+  if (!mixedStream) {
+    alert("⚠️ Please start the stream first.");
+    return;
+  }
+
+  call = peer.call(peerId, mixedStream);
+  statusEl.textContent = "📞 Calling...";
+  logDebug("📞 Calling peer: " + peerId);
+
+  call.on("stream", stream => {
+    const audio = new Audio();
+    audio.srcObject = stream;
+    audio.autoplay = true;
+    statusEl.textContent = "✅ Connected and streaming.";
+  });
 }
 
 function stopCall() {
@@ -95,6 +109,27 @@ function stopCall() {
 
   if (volumeMonitor) {
     cancelAnimationFrame(volumeMonitor);
+  }
+}
+
+function answerCall() {
+  if (incomingCallRef) {
+    incomingCallRef.answer();
+    statusEl.textContent = "✅ Call answered.";
+    document.getElementById("incoming-call-box").style.display = "none";
+    document.getElementById("caller-id").textContent = "...";
+    logDebug("✅ Call answered by receiver.");
+  }
+}
+
+function rejectCall() {
+  if (incomingCallRef) {
+    incomingCallRef.close();
+    incomingCallRef = null;
+    document.getElementById("incoming-call-box").style.display = "none";
+    document.getElementById("caller-id").textContent = "...";
+    statusEl.textContent = "❌ Call rejected.";
+    logDebug("❌ Call rejected by receiver.");
   }
 }
 
