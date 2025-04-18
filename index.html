@@ -2,28 +2,30 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Music Call Share</title>
-  <link rel="stylesheet" href="style.css">
+  <title>🎧 Music Share with Debug</title>
+  <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
 </head>
 <body>
   <div class="container">
-    <h2>🎧 Share System Audio & Mic</h2>
+    <h2>🎵 Share Your Music + Mic</h2>
 
     <div class="box">
       <label><strong>Your ID:</strong> <span id="my-id">...</span></label>
     </div>
 
     <div class="box">
-      <input id="peer-id" placeholder="Friend's Peer ID" />
-      <button onclick="startCall()">Start Call</button>
-    </div>
-
-    <div class="box">
-      <button onclick="stopCall()">Stop Call</button>
+      <input id="peer-id" placeholder="Enter peer ID to call" />
+      <button onclick="startCall()">📞 Start Call</button>
+      <button onclick="stopCall()">❌ Stop Call</button>
     </div>
 
     <div class="status" id="status">🔌 Not connected</div>
+
+    <div class="debug" id="debug-output">
+      <h3>🧪 Debug Info</h3>
+      <pre id="debug-log">Waiting...</pre>
+    </div>
   </div>
 
   <script src="script.js"></script>
