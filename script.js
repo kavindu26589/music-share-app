@@ -6,6 +6,7 @@ let volumeMonitor;
 
 const statusEl = document.getElementById("status");
 const debugLog = document.getElementById("debug-log");
+const playbackBtnContainer = document.getElementById("mobile-playback-button");
 
 peer.on("open", id => {
   document.getElementById("my-id").textContent = id;
@@ -21,12 +22,34 @@ peer.on("call", incomingCall => {
   statusEl.textContent = "📲 Incoming call from " + callerId;
 
   incomingCall.on("stream", stream => {
-    const audio = new Audio();
-    audio.srcObject = stream;
-    audio.autoplay = true;
+    logDebug("📥 Incoming audio stream detected");
     stream.getAudioTracks().forEach((track, i) => {
-      logDebug(`📥 Received Track ${i + 1}: ${track.label}`);
+      logDebug(`📥 Track ${i + 1}: ${track.label}, enabled=${track.enabled}`);
     });
+
+    const audio = document.createElement("audio");
+    audio.srcObject = stream;
+    audio.autoplay = false;
+    audio.controls = true;
+    audio.playsInline = true;
+    audio.style.display = "none";
+    document.body.appendChild(audio);
+
+    // Show mobile tap-to-play button
+    const playBtn = document.createElement("button");
+    playBtn.innerText = "▶️ Tap to Hear Music";
+    playBtn.onclick = () => {
+      audio.play().then(() => {
+        playBtn.remove();
+        logDebug("✅ Audio playback started");
+      }).catch(err => {
+        logDebug("❌ Audio play error: " + err.message);
+      });
+    };
+    playbackBtnContainer.innerHTML = ""; // Clear old
+    playbackBtnContainer.appendChild(playBtn);
+    playbackBtnContainer.style.display = "block";
+
     statusEl.textContent = "📡 Receiving stream from " + callerId;
   });
 
@@ -34,6 +57,8 @@ peer.on("call", incomingCall => {
     document.getElementById("incoming-call-box").style.display = "none";
     document.getElementById("caller-id").textContent = "...";
     statusEl.textContent = "📴 Call ended.";
+    playbackBtnContainer.innerHTML = "";
+    playbackBtnContainer.style.display = "none";
   });
 });
 
@@ -88,9 +113,13 @@ function startCall() {
   logDebug("📞 Calling peer: " + peerId);
 
   call.on("stream", stream => {
-    const audio = new Audio();
+    const audio = document.createElement("audio");
     audio.srcObject = stream;
     audio.autoplay = true;
+    audio.playsInline = true;
+    audio.style.display = "none";
+    document.body.appendChild(audio);
+    audio.play();
     statusEl.textContent = "✅ Connected and streaming.";
   });
 }
@@ -110,6 +139,9 @@ function stopCall() {
   if (volumeMonitor) {
     cancelAnimationFrame(volumeMonitor);
   }
+
+  playbackBtnContainer.innerHTML = "";
+  playbackBtnContainer.style.display = "none";
 }
 
 function answerCall() {
