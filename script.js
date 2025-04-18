@@ -4,8 +4,6 @@ let mixedStream = null;
 let incomingCallRef = null;
 let volumeMonitor;
 
-let compressor, bassEQ, midEQ, trebleEQ, noiseFilter;
-
 const statusEl = document.getElementById("status");
 const debugLog = document.getElementById("debug-log");
 const volumeMeter = document.getElementById("volume-meter");
@@ -72,50 +70,23 @@ async function prepareAudioStream() {
     const sysSource = audioContext.createMediaStreamSource(displayStream);
     const micSource = audioContext.createMediaStreamSource(micStream);
 
-    compressor = audioContext.createDynamicsCompressor();
-    noiseFilter = audioContext.createBiquadFilter();
-    bassEQ = audioContext.createBiquadFilter();
-    midEQ = audioContext.createBiquadFilter();
-    trebleEQ = audioContext.createBiquadFilter();
-
-    compressor.threshold.setValueAtTime(-30, audioContext.currentTime);
-    compressor.knee.setValueAtTime(40, audioContext.currentTime);
-    compressor.ratio.setValueAtTime(12, audioContext.currentTime);
-    compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
-    compressor.release.setValueAtTime(0.25, audioContext.currentTime);
-
-    bassEQ.type = "lowshelf";
-    bassEQ.frequency.value = 200;
-    bassEQ.gain.setValueAtTime(4, audioContext.currentTime);
-
-    midEQ.type = "peaking";
-    midEQ.frequency.value = 1000;
-    midEQ.Q.value = 1;
-    midEQ.gain.setValueAtTime(2, audioContext.currentTime);
-
-    trebleEQ.type = "highshelf";
-    trebleEQ.frequency.value = 3000;
-    trebleEQ.gain.setValueAtTime(3, audioContext.currentTime);
-
+    // Optional: High-pass filter to suppress low noise
+    const noiseFilter = audioContext.createBiquadFilter();
     noiseFilter.type = "highpass";
     noiseFilter.frequency.value = 120;
 
     sysSource.connect(noiseFilter);
     micSource.connect(noiseFilter);
-    noiseFilter.connect(bassEQ);
-    bassEQ.connect(midEQ);
-    midEQ.connect(trebleEQ);
-    trebleEQ.connect(compressor);
-    compressor.connect(destination);
+    noiseFilter.connect(destination);
 
-    monitorVolume(compressor, audioContext);
+    monitorVolume(noiseFilter, audioContext);
     mixedStream = destination.stream;
 
-    statusEl.textContent = "🎙 Stream ready (auto-EQ)";
-    logDebug("✅ Stream ready with automatic EQ & noise filter.");
+    statusEl.textContent = "🎙 Stream ready";
+    logDebug("✅ Stream ready (no EQ, noise filter only).");
   } catch (err) {
     logDebug("❌ Error: " + err.message);
-    alert("Error capturing audio. Please try again.");
+    alert("Error capturing audio.");
   }
 }
 
@@ -163,7 +134,7 @@ function stopCall() {
 
 function answerCall() {
   if (incomingCallRef) {
-    incomingCallRef.answer(); // Answer without sending a stream
+    incomingCallRef.answer(); // ✅ Answer without stream
     document.getElementById("incoming-call-box").style.display = "none";
     document.getElementById("caller-id").textContent = "...";
     logDebug("✅ Call answered.");
