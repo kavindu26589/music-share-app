@@ -3,10 +3,23 @@ let call;
 let mixedStream = null;
 let incomingCallRef = null;
 let volumeMonitor;
+let compressor; // make it global to adjust
 
 const statusEl = document.getElementById("status");
 const debugLog = document.getElementById("debug-log");
+const volumeMeter = document.getElementById("volume-meter");
 const playbackBtnContainer = document.getElementById("mobile-playback-button");
+
+// 🎚 Dynamic compression ratio slider
+const ratioSlider = document.getElementById("ratio-slider");
+const ratioValue = document.getElementById("ratio-value");
+ratioSlider.addEventListener("input", () => {
+  ratioValue.textContent = ratioSlider.value;
+  if (compressor) {
+    compressor.ratio.setValueAtTime(ratioSlider.value, compressor.context.currentTime);
+    logDebug("🔧 Compression ratio set to " + ratioSlider.value);
+  }
+});
 
 peer.on("open", id => {
   document.getElementById("my-id").textContent = id;
@@ -23,9 +36,6 @@ peer.on("call", incomingCall => {
 
   incomingCall.on("stream", stream => {
     logDebug("📥 Incoming audio stream detected");
-    stream.getAudioTracks().forEach((track, i) => {
-      logDebug(`📥 Track ${i + 1}: ${track.label}, enabled=${track.enabled}`);
-    });
 
     const audio = document.createElement("audio");
     audio.srcObject = stream;
@@ -35,7 +45,6 @@ peer.on("call", incomingCall => {
     audio.style.display = "none";
     document.body.appendChild(audio);
 
-    // Show mobile tap-to-play button
     const playBtn = document.createElement("button");
     playBtn.innerText = "▶️ Tap to Hear Music";
     playBtn.onclick = () => {
@@ -46,7 +55,7 @@ peer.on("call", incomingCall => {
         logDebug("❌ Audio play error: " + err.message);
       });
     };
-    playbackBtnContainer.innerHTML = ""; // Clear old
+    playbackBtnContainer.innerHTML = "";
     playbackBtnContainer.appendChild(playBtn);
     playbackBtnContainer.style.display = "block";
 
@@ -56,9 +65,9 @@ peer.on("call", incomingCall => {
   incomingCall.on("close", () => {
     document.getElementById("incoming-call-box").style.display = "none";
     document.getElementById("caller-id").textContent = "...";
-    statusEl.textContent = "📴 Call ended.";
     playbackBtnContainer.innerHTML = "";
     playbackBtnContainer.style.display = "none";
+    statusEl.textContent = "📴 Call ended.";
   });
 });
 
@@ -79,10 +88,19 @@ async function prepareAudioStream() {
     const sysSource = audioContext.createMediaStreamSource(displayStream);
     const micSource = audioContext.createMediaStreamSource(micStream);
 
-    sysSource.connect(destination);
-    micSource.connect(destination);
+    // 🎛 Add compressor for volume leveling
+    compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-30, audioContext.currentTime);
+    compressor.knee.setValueAtTime(40, audioContext.currentTime);
+    compressor.ratio.setValueAtTime(ratioSlider.value, audioContext.currentTime);
+    compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
+    compressor.release.setValueAtTime(0.25, audioContext.currentTime);
 
-    monitorVolume(sysSource, audioContext);
+    sysSource.connect(compressor);
+    micSource.connect(compressor);
+    compressor.connect(destination);
+
+    monitorVolume(compressor, audioContext);
 
     displayStream.getAudioTracks().forEach((track, i) =>
       logDebug(`🔊 System Audio Track ${i + 1}: ${track.label}`)
@@ -92,7 +110,7 @@ async function prepareAudioStream() {
     );
 
     mixedStream = destination.stream;
-    statusEl.textContent = "🎙 Stream ready.";
+    statusEl.textContent = "🎙 Stream ready (volume leveled)";
     logDebug("✅ Stream is ready. Now start your call.");
   } catch (err) {
     logDebug("❌ Error capturing stream: " + err.message);
@@ -102,7 +120,6 @@ async function prepareAudioStream() {
 
 function startCall() {
   const peerId = document.getElementById("peer-id").value;
-
   if (!mixedStream) {
     alert("⚠️ Please start the stream first.");
     return;
@@ -170,9 +187,10 @@ function logDebug(msg) {
   debugLog.scrollTop = debugLog.scrollHeight;
 }
 
-function monitorVolume(source, audioContext) {
-  const analyser = audioContext.createAnalyser();
-  analyser.fftSize = 512;
+// 📊 Live volume meter
+function monitorVolume(source, context) {
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 256;
   const bufferLength = analyser.frequencyBinCount;
   const dataArray = new Uint8Array(bufferLength);
 
@@ -181,8 +199,7 @@ function monitorVolume(source, audioContext) {
   function updateVolume() {
     analyser.getByteFrequencyData(dataArray);
     const avg = dataArray.reduce((a, b) => a + b) / bufferLength;
-    const emoji = avg > 10 ? "🎵 Music Detected" : "🔇 Silence";
-    statusEl.textContent = `📶 Volume Level: ${Math.floor(avg)} | ${emoji}`;
+    volumeMeter.value = avg;
     volumeMonitor = requestAnimationFrame(updateVolume);
   }
 
