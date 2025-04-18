@@ -72,7 +72,7 @@ async function prepareAudioStream() {
     const sysSource = audioContext.createMediaStreamSource(displayStream);
     const micSource = audioContext.createMediaStreamSource(micStream);
 
-    // 🎛 Filters
+    // 🎛 Auto EQ & Compressor
     compressor = audioContext.createDynamicsCompressor();
     bassEQ = audioContext.createBiquadFilter();
     midEQ = audioContext.createBiquadFilter();
@@ -87,19 +87,23 @@ async function prepareAudioStream() {
 
     bassEQ.type = "lowshelf";
     bassEQ.frequency.value = 200;
+    bassEQ.gain.value = 4;  // boost bass
 
     midEQ.type = "peaking";
     midEQ.frequency.value = 1000;
     midEQ.Q.value = 1;
+    midEQ.gain.value = 2;  // boost mids
 
     trebleEQ.type = "highshelf";
     trebleEQ.frequency.value = 3000;
+    trebleEQ.gain.value = 3;  // boost highs
 
     noiseFilter.type = "highpass";
     noiseFilter.frequency.value = 120;
 
     sysSource.connect(noiseFilter);
     micSource.connect(noiseFilter);
+
     noiseFilter.connect(bassEQ);
     bassEQ.connect(midEQ);
     midEQ.connect(trebleEQ);
@@ -109,11 +113,11 @@ async function prepareAudioStream() {
     monitorVolume(compressor, audioContext);
     mixedStream = destination.stream;
 
-    statusEl.textContent = "🎙 Stream ready (with EQ & Noise Filter)";
-    logDebug("✅ Stream is ready.");
+    statusEl.textContent = "🎙 Stream ready (auto-EQ)";
+    logDebug("✅ Stream ready with automatic EQ & noise filter.");
   } catch (err) {
-    logDebug("❌ Stream error: " + err.message);
-    alert("Error capturing audio. Please try again.");
+    logDebug("❌ Error: " + err.message);
+    alert("Error capturing audio.");
   }
 }
 
@@ -201,22 +205,3 @@ function monitorVolume(source, context) {
 
   updateVolume();
 }
-
-// 🎚 Sliders
-document.getElementById("ratio-slider").addEventListener("input", e => {
-  const val = parseFloat(e.target.value);
-  if (compressor) compressor.ratio.setValueAtTime(val, compressor.context.currentTime);
-  document.getElementById("ratio-value").textContent = val;
-});
-
-["bass", "mid", "treble"].forEach(id => {
-  document.getElementById(id).addEventListener("input", e => {
-    const val = parseFloat(e.target.value);
-    document.getElementById(`${id}-val`).textContent = val;
-
-    const gain = val * 10 - 10;
-    if (id === "bass") bassEQ.gain.value = gain;
-    else if (id === "mid") midEQ.gain.value = gain;
-    else if (id === "treble") trebleEQ.gain.value = gain;
-  });
-});
