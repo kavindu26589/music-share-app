@@ -101,6 +101,17 @@ function startCall() {
   statusEl.textContent = "📞 Calling...";
   logDebug("📞 Calling " + peerId);
 
+  // ✅ Update status once call is connected (even without remote stream)
+  call.on("close", () => {
+    statusEl.textContent = "🔌 Call ended.";
+  });
+
+  call.on("error", err => {
+    logDebug("❌ Call error: " + err.message);
+    statusEl.textContent = "❌ Call failed.";
+  });
+
+  // ✅ If receiver sends a stream back
   call.on("stream", stream => {
     const audio = new Audio();
     audio.srcObject = stream;
@@ -109,8 +120,18 @@ function startCall() {
     audio.style.display = "none";
     document.body.appendChild(audio);
     audio.play();
-    statusEl.textContent = "✅ Streaming started.";
+
+    statusEl.textContent = "✅ Connected (stream received)";
+    logDebug("✅ Stream received from receiver");
   });
+
+  // ✅ In case no stream is returned (receiver just answers)
+  setTimeout(() => {
+    if (statusEl.textContent === "📞 Calling...") {
+      statusEl.textContent = "✅ Connected (no stream returned)";
+      logDebug("ℹ️ Receiver answered without returning stream");
+    }
+  }, 2000);
 }
 
 function stopCall() {
