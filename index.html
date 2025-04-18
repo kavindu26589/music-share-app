@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Music Call Share</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h2>🎧 Share System Audio & Mic</h2>
+
+    <div class="box">
+      <label><strong>Your ID:</strong> <span id="my-id">...</span></label>
+    </div>
+
+    <div class="box">
+      <input id="peer-id" placeholder="Friend's Peer ID" />
+      <button onclick="startCall()">Start Call</button>
+    </div>
+
+    <div class="box">
+      <button onclick="stopCall()">Stop Call</button>
+    </div>
+
+    <div class="status" id="status">🔌 Not connected</div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
